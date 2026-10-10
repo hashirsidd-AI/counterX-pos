@@ -1,0 +1,51 @@
+# counterX POS — automatic Windows build (GitHub Actions)
+#
+# What this does: every time you push a version tag like v1.0.0,
+# GitHub's own Windows computer automatically builds
+# CounterX-POS-Setup-1.0.0.exe and attaches it to the release page.
+# You do NOT need your own Windows computer for the build.
+#
+# One-time setup (5 minutes, no coding):
+#   1. Create a free account at https://github.com
+#   2. Create a new repository, upload this project folder to it
+#   3. Click "Releases" -> "Create a new release" -> tag: v1.0.0 -> Publish
+#   4. Wait ~10 minutes -> download CounterX-POS-Setup-1.0.0.exe from the release
+
+name: Build Windows installer
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build executable (PyInstaller)
+        run: pyinstaller installer/counterx.spec --noconfirm
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\counterx.iss
+
+      - name: Upload installer as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CounterX-POS-Setup-*.exe

@@ -1,0 +1,22 @@
+[project]
+name = "counterx-pos"
+version = "1.0.0"
+description = "counterX — Professional Offline POS for the Pakistani market (Windows desktop)"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.7.0",
+    "SQLAlchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.0"]
+pdf = ["reportlab>=4.1.0"]
+barcode = ["python-barcode>=0.15.0"]
+test = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
