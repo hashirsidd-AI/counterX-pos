@@ -4,4 +4,4 @@ SQLAlchemy>=2.0.0
 # Optional / platform-specific (installed by build script when needed):
 # python-barcode>=0.15.0   # barcode image generation
 # reportlab>=4.1.0         # PDF reports
-# pywin32>=306; sys_platform == "win32"  # receipt printing on Windows
+pywin32>=306; sys_platform == "win32"  # receipt printing on Windows

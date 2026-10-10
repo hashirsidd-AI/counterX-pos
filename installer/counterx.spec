@@ -14,6 +14,7 @@ a = Analysis(
         'sqlalchemy',
         'sqlalchemy.sql.default_comparator',
         'PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'PySide6.QtPrintSupport',
+        'win32print', 'win32api', 'pywintypes',
     ],
     hookspath=[],
     runtime_hooks=[],
