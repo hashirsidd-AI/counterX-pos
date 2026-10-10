@@ -3,7 +3,7 @@
 ; (after building the app folder with PyInstaller)
 
 #define MyAppName "counterX POS"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "counterX"
 #define MyAppExeName "counterX POS.exe"
 
@@ -17,7 +17,7 @@ DefaultDirName={autopf}\counterX POS
 DefaultGroupName=counterX POS
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=counterX-POS-Setup-1.0.0
+OutputBaseFilename=counterX-POS-Setup-1.1.0
 SetupIconFile=..\assets\counterx.ico
 Compression=lzma2
 SolidCompression=yes

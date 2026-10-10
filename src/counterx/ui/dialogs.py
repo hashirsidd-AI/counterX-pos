@@ -7,8 +7,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit,
-    QVBoxLayout, QWidget,
+    QPushButton, QRadioButton, QTabWidget, QTableWidget, QTableWidgetItem,
+    QTextEdit, QVBoxLayout, QWidget,
 )
 
 from .. import models
@@ -41,6 +41,14 @@ class LoginDialog(QDialog):
         self.setMinimumWidth(340)
 
         layout = QVBoxLayout(self)
+        brand = QLabel("◆ CounterX")
+        set_class(brand, "brand-dark")
+        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(brand)
+        brand_sub = QLabel("POS SOFTWARE COMPANY")
+        set_class(brand_sub, "brand-sub-dark")
+        brand_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(brand_sub)
         title = QLabel(APP_NAME)
         set_class(title, "h1")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -229,6 +237,21 @@ class FirstRunWizard(QDialog):
         form.addRow("Owner password:", self.owner_password)
         layout.addLayout(form)
 
+        cat_lbl = QLabel("Starting catalogue:")
+        set_class(cat_lbl, "h2")
+        layout.addWidget(cat_lbl)
+        self.demo_radio_sample = QRadioButton(
+            "Load sample fast-food menu (recommended)")
+        self.demo_radio_sample.setChecked(True)
+        self.demo_radio_empty = QRadioButton("Start with empty catalogue")
+        layout.addWidget(self.demo_radio_sample)
+        layout.addWidget(self.demo_radio_empty)
+        demo_hint = QLabel("Sample items are clearly marked and can be edited "
+                           "or removed any time from Products & Menu.")
+        set_class(demo_hint, "muted")
+        demo_hint.setWordWrap(True)
+        layout.addWidget(demo_hint)
+
         self.error_label = QLabel("")
         self.error_label.setStyleSheet("color: #D64545;")
         self.error_label.setWordWrap(True)
@@ -284,6 +307,17 @@ class FirstRunWizard(QDialog):
         except ValueError as e:
             self.error_label.setText(str(e))
             return
+        # Optional demo catalogue: never blocks setup on failure.
+        if self.demo_radio_sample.isChecked():
+            try:
+                from ..services.demo_data import seed_demo_menu
+                with session_scope(self.engine) as s2:
+                    owner = s2.get(models.User, self.user_id)
+                    seed_demo_menu(s2, owner)
+            except Exception as e:  # noqa: BLE001
+                self.error_label.setText(
+                    f"Setup is complete, but the sample menu could not be "
+                    f"loaded: {e}")
         # Show the owner recovery code exactly once.
         RecoveryCodeDialog(self, recovery_code).exec()
         self.accept()

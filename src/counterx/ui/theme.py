@@ -46,6 +46,25 @@ QLabel[cssClass="muted"] {{
 QLabel[cssClass="kpi"] {{
     font-size: 24px; font-weight: 700; color: {t['navy_bg']};
 }}
+QLabel[cssClass="grand"] {{
+    font-size: 26px; font-weight: 800; color: {t['navy_bg']};
+}}
+QLabel[cssClass="brand"] {{
+    color: {t['white']}; font-size: 22px; font-weight: 800;
+}}
+QLabel[cssClass="brand-sub"] {{
+    color: #9FB0C7; font-size: 10px; letter-spacing: 2px;
+}}
+QLabel[cssClass="brand-dark"] {{
+    color: {t['navy_bg']}; font-size: 22px; font-weight: 800;
+}}
+QLabel[cssClass="brand-sub-dark"] {{
+    color: {t['text_secondary']}; font-size: 10px; letter-spacing: 2px;
+}}
+QLabel[cssClass="nav-section"] {{
+    color: #9FB0C7; font-size: 10px; font-weight: 700; letter-spacing: 1px;
+    padding: 10px 14px 2px 14px;
+}}
 QFrame[cssClass="card"] {{
     background: {t['white']};
     border: 1px solid {t['border']};

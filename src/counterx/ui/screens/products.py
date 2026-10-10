@@ -4,15 +4,15 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, QTableWidget, QTableWidgetItem,
-    QTextEdit, QVBoxLayout,
+    QFileDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+    QListWidget, QListWidgetItem, QPushButton, QTableWidget, QTableWidgetItem,
+    QTextEdit, QToolButton, QVBoxLayout, QWidget,
 )
 from sqlalchemy import or_
 
 from ... import models
 from ...utils.money import d, q
-from ..base import BaseScreen
+from ..base import BaseScreen, get_setting
 from ..theme import set_class
 
 
@@ -25,7 +25,7 @@ def _price_spin(decimals: int = 2) -> QDoubleSpinBox:
 
 
 class ProductDialog(QDialog):
-    """Add / edit a product. Saves via CatalogService inside ``safe()``."""
+    """Add / edit a product — streamlined form. Saves via CatalogService."""
 
     def __init__(self, screen: "ProductsScreen", product_id: int | None = None):
         super().__init__(screen)
@@ -33,37 +33,98 @@ class ProductDialog(QDialog):
         self._product_id = product_id
         self.setWindowTitle("Edit Product" if product_id else "Add Product")
         self.setModal(True)
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(470)
 
-        form = QFormLayout(self)
-        self.sku = QLineEdit()
+        root = QVBoxLayout(self)
+        root.setSpacing(8)
+
+        # ---------------- basic fields ----------------
+        form = QFormLayout()
+        form.setSpacing(8)
+
         self.name = QLineEdit()
+        self.name.setPlaceholderText("e.g. Zinger Burger")
+        form.addRow("Product name *:", self.name)
+
+        cat_row = QHBoxLayout()
+        cat_row.setSpacing(6)
+        self.category = QComboBox()
+        cat_row.addWidget(self.category, 1)
+        self.cat_add_btn = QPushButton("+")
+        self.cat_add_btn.setToolTip("Create a new category")
+        self.cat_add_btn.setFixedWidth(38)
+        self.cat_add_btn.clicked.connect(self._add_category)
+        cat_row.addWidget(self.cat_add_btn)
+        form.addRow("Category:", cat_row)
+
+        self.sell_price = _price_spin()
+        form.addRow("Sell price (Rs) *:", self.sell_price)
+
+        self.cost_price = _price_spin()
+        form.addRow("Cost price (Rs):", self.cost_price)
+
+        self.stock_spin = _price_spin(decimals=3)
+        form.addRow("Stock quantity:", self.stock_spin)
+
+        self.min_stock = _price_spin(decimals=3)
+        form.addRow("Low-stock alert at:", self.min_stock)
+
+        self.barcode = QLineEdit()
+        self.barcode.setPlaceholderText("Scan or type barcode")
+        form.addRow("Barcode:", self.barcode)
+
+        img_row = QHBoxLayout()
+        img_row.setSpacing(6)
+        self.image_path = QLineEdit()
+        self.image_path.setReadOnly(True)
+        self.image_path.setPlaceholderText("No image selected")
+        img_row.addWidget(self.image_path, 1)
+        img_btn = QPushButton("Browse…")
+        img_btn.clicked.connect(self._browse_image)
+        img_row.addWidget(img_btn)
+        form.addRow("Product image:", img_row)
+
+        # current stock (edit mode only, read-only)
+        self.stock_info = QLabel()
+        set_class(self.stock_info, "muted")
+        self.stock_info.setVisible(product_id is not None)
+        if product_id is not None:
+            form.addRow("", self.stock_info)
+
+        root.addLayout(form)
+
+        # ---------------- advanced options ----------------
+        self.adv_btn = QToolButton()
+        self.adv_btn.setText("Advanced Options")
+        self.adv_btn.setCheckable(True)
+        self.adv_btn.setChecked(False)
+        self.adv_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.adv_btn.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.adv_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.adv_btn.toggled.connect(self._toggle_advanced)
+        root.addWidget(self.adv_btn)
+
+        self.adv_widget = QWidget()
+        adv_form = QFormLayout(self.adv_widget)
+        adv_form.setSpacing(8)
+        self.sku = QLineEdit()
+        adv_form.addRow("SKU *:", self.sku)
         self.name_ur = QLineEdit()
         self.name_ur.setPlaceholderText("اردو نام")
-        self.barcode = QLineEdit()
-        self.category = QComboBox()
-        self.cost_price = _price_spin()
-        self.sell_price = _price_spin()
+        adv_form.addRow("Urdu name:", self.name_ur)
         self.tax = QComboBox()
+        adv_form.addRow("Tax rate:", self.tax)
         self.track_stock = QCheckBox("Track stock for this product")
         self.track_stock.setChecked(True)
-        self.min_stock = _price_spin(decimals=3)
+        adv_form.addRow("", self.track_stock)
         self.description = QTextEdit()
         self.description.setMaximumHeight(70)
+        adv_form.addRow("Description:", self.description)
+        self.adv_widget.setVisible(False)
+        root.addWidget(self.adv_widget)
 
-        form.addRow("SKU *:", self.sku)
-        form.addRow("Name *:", self.name)
-        form.addRow("Urdu name:", self.name_ur)
-        form.addRow("Barcode:", self.barcode)
-        form.addRow("Category:", self.category)
-        form.addRow("Cost price:", self.cost_price)
-        form.addRow("Sell price:", self.sell_price)
-        form.addRow("Tax rate:", self.tax)
-        form.addRow("", self.track_stock)
-        form.addRow("Min stock:", self.min_stock)
-        form.addRow("Description:", self.description)
-
-        # -- fill combos (plain values, inside session) --
+        # -- fill combos + SKU default (plain values, inside session) --
         self.category.addItem("No category", None)
         self.tax.addItem("Default tax", None)
         with screen.db() as s:
@@ -72,10 +133,12 @@ class ProductDialog(QDialog):
                     svc.catalog.list_categories(active_only=False)]
             rates = [(r.id, r.name, r.rate_percent) for r in
                      svc.directory.list_tax_rates()]
+            sku_default = svc.catalog.generate_sku()
         for cid, cname in cats:
             self.category.addItem(cname, cid)
         for rid, rname, pct in rates:
             self.tax.addItem(f"{rname} ({pct}%)", rid)
+        self.sku.setText(sku_default)
 
         if product_id is not None:
             self._load(product_id)
@@ -86,20 +149,54 @@ class ProductDialog(QDialog):
         set_class(buttons.button(QDialogButtonBox.StandardButton.Ok), "primary")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        root.addWidget(buttons)
+
+    def _toggle_advanced(self, checked: bool) -> None:
+        self.adv_widget.setVisible(checked)
+        self.adv_btn.setArrowType(Qt.ArrowType.DownArrow if checked
+                                  else Qt.ArrowType.RightArrow)
+
+    def _add_category(self) -> None:
+        name, ok = QInputDialog.getText(self, "New Category", "Category name:")
+        if not ok or not name.strip():
+            return
+
+        def do():
+            with self._screen.db() as s:
+                svc = self._screen.svc(s)
+                actor = self._screen.ctx.actor(s)
+                cat = svc.catalog.create_category(name.strip(), actor)
+                return cat.id, cat.name
+
+        res = self._screen.safe(do)
+        if res:
+            cid, cname = res
+            self.category.addItem(cname, cid)
+            self.category.setCurrentIndex(self.category.findData(cid))
+
+    def _browse_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Product Image", "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)")
+        if path:
+            self.image_path.setText(path)
 
     def _load(self, product_id: int) -> None:
         with self._screen.db() as s:
+            svc = self._screen.svc(s)
             p = s.get(models.Product, product_id)
             if p is None:
                 return
+            level = svc.inventory.stock_level(product_id)
             data = dict(sku=p.sku, name=p.name, name_ur=p.name_ur or "",
                         barcode=p.barcode or "", category_id=p.category_id,
                         cost=float(p.cost_price or 0),
                         sell=float(p.sell_price or 0),
                         tax_rate_id=p.tax_rate_id,
                         track=p.track_stock, min_stock=float(p.min_stock or 0),
-                        description=p.description or "")
+                        description=p.description or "",
+                        image_path=p.image_path or "",
+                        level=float(level))
         self.sku.setText(data["sku"])
         self.name.setText(data["name"])
         self.name_ur.setText(data["name_ur"])
@@ -108,25 +205,43 @@ class ProductDialog(QDialog):
         self.category.setCurrentIndex(max(idx, 0))
         self.cost_price.setValue(data["cost"])
         self.sell_price.setValue(data["sell"])
+        self.stock_spin.setValue(data["level"])
+        self.stock_info.setText(f"Current stock: {data['level']:g}")
         idx = self.tax.findData(data["tax_rate_id"])
         self.tax.setCurrentIndex(max(idx, 0))
         self.track_stock.setChecked(data["track"])
         self.min_stock.setValue(data["min_stock"])
         self.description.setPlainText(data["description"])
+        self.image_path.setText(data["image_path"])
 
     def _save(self) -> None:
+        name = self.name.text().strip()
+        sku = self.sku.text().strip()
+        sell = q(d(str(self.sell_price.value())))
+        if not name:
+            self._screen.warn("Product name is required.")
+            return
+        if not sku:
+            self._screen.warn("SKU is required.")
+            return
+        if sell <= 0:
+            self._screen.warn("Sell price must be greater than zero.")
+            return
+
+        stock_qty = q(d(str(self.stock_spin.value())))
+        track = self.track_stock.isChecked()
         payload = dict(
-            sku=self.sku.text().strip(),
-            name=self.name.text().strip(),
+            name=name,
             barcode=self.barcode.text().strip() or None,
             category_id=self.category.currentData(),
             cost_price=q(d(str(self.cost_price.value()))),
-            sell_price=q(d(str(self.sell_price.value()))),
+            sell_price=sell,
             tax_rate_id=self.tax.currentData(),
-            track_stock=self.track_stock.isChecked(),
+            track_stock=track,
             min_stock=q(d(str(self.min_stock.value()))),
             name_ur=self.name_ur.text().strip(),
             description=self.description.toPlainText().strip(),
+            image_path=self.image_path.text().strip(),
         )
 
         def do() -> bool:
@@ -134,9 +249,19 @@ class ProductDialog(QDialog):
                 svc = self._screen.svc(s)
                 actor = self._screen.ctx.actor(s)
                 if self._product_id is None:
-                    svc.catalog.create_product(actor, **payload)
+                    prod = svc.catalog.create_product(actor, sku=sku, **payload)
+                    if track and stock_qty > 0:
+                        svc.inventory.set_opening_stock(prod.id, stock_qty,
+                                                        actor)
                 else:
-                    svc.catalog.update_product(self._product_id, actor, **payload)
+                    svc.catalog.update_product(self._product_id, actor,
+                                               sku=sku, **payload)
+                    current = svc.inventory.stock_level(self._product_id)
+                    delta = q(stock_qty - current)
+                    if delta != 0:
+                        svc.inventory.adjust(
+                            self._product_id, delta, actor,
+                            note="Manual adjustment from product form")
             return True
 
         if self._screen.safe(do):
@@ -281,6 +406,21 @@ class ProductsScreen(BaseScreen):
         set_class(title, "h1")
         layout.addWidget(title)
 
+        # Demo-data banner (only when the sample catalogue was seeded).
+        self.demo_banner = QWidget()
+        banner_row = QHBoxLayout(self.demo_banner)
+        banner_row.setContentsMargins(10, 6, 10, 6)
+        demo_info = QLabel("You are viewing sample demo data — edit or delete "
+                           "freely.")
+        set_class(demo_info, "muted")
+        banner_row.addWidget(demo_info)
+        banner_row.addStretch(1)
+        self.demo_remove_btn = QPushButton("Remove demo data")
+        self.demo_remove_btn.clicked.connect(self._remove_demo)
+        banner_row.addWidget(self.demo_remove_btn)
+        self.demo_banner.setVisible(False)
+        layout.addWidget(self.demo_banner)
+
         toolbar = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search by name, SKU or barcode…")
@@ -344,7 +484,26 @@ class ProductsScreen(BaseScreen):
 
     def on_show(self) -> None:
         self._load_categories()
+        with self.db() as s:
+            seeded = get_setting(s, "demo_data_seeded", "") == "1"
+        self.demo_banner.setVisible(seeded)
         self.refresh()
+
+    def _remove_demo(self) -> None:
+        if not self.confirm("Remove all sample demo products and their demo "
+                            "categories?\nYour real products will not be touched."):
+            return
+
+        def do() -> int:
+            from ...services.demo_data import remove_demo_data
+            with self.db() as s:
+                actor = self.ctx.actor(s)
+                return remove_demo_data(s, actor)
+
+        count = self.safe(do)
+        if count is not None:
+            self.info(f"Removed {count} demo product(s).")
+            self.on_show()
 
     # -- data -------------------------------------------------------------------
     def _load_categories(self) -> None:

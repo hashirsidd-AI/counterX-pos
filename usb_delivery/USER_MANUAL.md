@@ -108,7 +108,8 @@ Reports can be printed or exported. **Profit figures are estimates** — the app
 
 ## 12. Products, categories, and stock — the basics
 
-- **Products & Menu** — add or edit products: name (English and Urdu), price, cost, barcode/SKU, category. Changes apply immediately.
+- **Products & Menu** — add or edit products with a short form: name, category (create a new one with the **+** button), sell price, cost, stock quantity, low-stock alert, barcode, and image. Extra options (SKU, Urdu name, tax rate, description) live under **Advanced Options**. Changing the stock quantity on an existing product posts a labelled adjustment. Changes apply immediately.
+- Sample menu — if you chose the sample catalogue during setup, demo items are marked and can be edited or removed any time; use **Remove demo data** at the top of Products & Menu to clear them all at once.
 - **Categories & Modifiers** — organize the menu; add sizes and add-ons (for example, "Large", "Extra Cheese").
 - **Inventory & Stock** — see current stock, adjust quantities, and view the movement history of every item.
 - **Purchases** — record stock received from a **Supplier**.

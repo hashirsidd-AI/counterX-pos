@@ -9,8 +9,8 @@ APP_NAME = "counterX POS"
 APP_SLUG = "counterx"
 COMPANY_NAME = "counterX"
 COMPANY_PHONES = ["+92 315 7988387", "+44 7878 921068"]
-APP_VERSION = "1.0.0"
-BUILD_NUMBER = "100"
+APP_VERSION = "1.1.0"
+BUILD_NUMBER = "110"
 
 # --- Official colour theme: Midnight Navy + Teal + White ---------------------
 THEME = {

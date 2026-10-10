@@ -6,9 +6,9 @@ from decimal import Decimal
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
-    QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, QScrollArea, QTableWidget, QTableWidgetItem,
+    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+    QFormLayout, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+    QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QToolButton,
     QVBoxLayout, QWidget,
 )
 
@@ -86,6 +86,8 @@ class POSScreen(BaseScreen):
         self._lines: list[CartLine] = []      # plain dataclasses; no ORM objects
         self._products: dict[int, dict] = {}  # product_id -> plain info (for tax rate)
         self.last_sale_id: int | None = None
+        self._cat_buttons: list[tuple[QPushButton, int | None]] = []
+        self._active_cat_id: int | None = None
         super().__init__(ctx, parent)
 
     # ------------------------------------------------------------------ UI ---
@@ -104,13 +106,20 @@ class POSScreen(BaseScreen):
         self.search_edit.textChanged.connect(self._reload_cards)
         left.addWidget(self.search_edit)
 
-        mid = QHBoxLayout()
-        mid.setSpacing(8)
-
-        self.cat_list = QListWidget()
-        self.cat_list.setMaximumWidth(150)
-        self.cat_list.currentRowChanged.connect(lambda _r: self._reload_cards())
-        mid.addWidget(self.cat_list)
+        # horizontal scrollable category buttons ("All" + each category)
+        cat_scroll = QScrollArea()
+        cat_scroll.setWidgetResizable(True)
+        cat_scroll.setFixedHeight(52)
+        cat_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        cat_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        cat_host = QWidget()
+        self.cat_bar = QHBoxLayout(cat_host)
+        self.cat_bar.setContentsMargins(0, 0, 0, 0)
+        self.cat_bar.setSpacing(6)
+        cat_scroll.setWidget(cat_host)
+        left.addWidget(cat_scroll)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -118,8 +127,7 @@ class POSScreen(BaseScreen):
         self.cards_grid = QGridLayout(self.cards_widget)
         self.cards_grid.setSpacing(8)
         scroll.setWidget(self.cards_widget)
-        mid.addWidget(scroll, 1)
-        left.addLayout(mid, 1)
+        left.addWidget(scroll, 1)
 
         left_widget = QWidget()
         left_widget.setLayout(left)
@@ -181,13 +189,13 @@ class POSScreen(BaseScreen):
         grand_lab = QLabel("Grand Total:")
         set_class(grand_lab, "h2")
         self.grand_label = QLabel(fmt(0))
-        set_class(self.grand_label, "h1")
+        set_class(self.grand_label, "grand")
         self.grand_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         totals_grid.addWidget(grand_lab, 5, 0)
         totals_grid.addWidget(self.grand_label, 5, 1)
         right.addLayout(totals_grid)
 
-        # order options
+        # order options — sale type / customer / notes stay visible
         opts = QFormLayout()
         self.type_combo = QComboBox()
         for t in SALE_TYPES:
@@ -195,39 +203,53 @@ class POSScreen(BaseScreen):
         self.type_combo.setCurrentIndex(1)  # takeaway
         opts.addRow("Sale type:", self.type_combo)
 
-        self.table_edit = QLineEdit()
-        self.table_edit.setPlaceholderText("Table no.")
-        opts.addRow("Table:", self.table_edit)
-        self.waiter_edit = QLineEdit()
-        self.waiter_edit.setPlaceholderText("Waiter name")
-        opts.addRow("Waiter:", self.waiter_edit)
-
         self.customer_combo = QComboBox()
         opts.addRow("Customer:", self.customer_combo)
 
         self.notes_edit = QLineEdit()
         self.notes_edit.setPlaceholderText("Notes (optional)")
         opts.addRow("Notes:", self.notes_edit)
+        right.addLayout(opts)
 
+        # secondary order details (table/waiter/charges) in a collapsible block
+        self.details_btn = QToolButton()
+        self.details_btn.setText("Order details")
+        self.details_btn.setCheckable(True)
+        self.details_btn.setChecked(False)
+        self.details_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.details_btn.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.details_btn.toggled.connect(self._toggle_details)
+        right.addWidget(self.details_btn)
+
+        self.details_widget = QWidget()
+        self.details_form = QFormLayout(self.details_widget)
+        self.table_edit = QLineEdit()
+        self.table_edit.setPlaceholderText("Table no.")
+        self.details_form.addRow("Table:", self.table_edit)
+        self.waiter_edit = QLineEdit()
+        self.waiter_edit.setPlaceholderText("Waiter name")
+        self.details_form.addRow("Waiter:", self.waiter_edit)
         self.service_spin = QDoubleSpinBox()
         self.service_spin.setRange(0, 10_000_000)
         self.service_spin.setDecimals(2)
         self.service_spin.valueChanged.connect(self._refresh_totals)
-        opts.addRow("Service charge:", self.service_spin)
-
+        self.details_form.addRow("Service charge:", self.service_spin)
         self.delivery_spin = QDoubleSpinBox()
         self.delivery_spin.setRange(0, 10_000_000)
         self.delivery_spin.setDecimals(2)
         self.delivery_spin.valueChanged.connect(self._refresh_totals)
-        opts.addRow("Delivery charge:", self.delivery_spin)
-        right.addLayout(opts)
+        self.details_form.addRow("Delivery charge:", self.delivery_spin)
+        self.details_widget.setVisible(False)
+        right.addWidget(self.details_widget)
 
         # action buttons
         actions = QGridLayout()
         actions.setSpacing(8)
         self.btn_checkout = QPushButton("Checkout")
         set_class(self.btn_checkout, "primary")
-        self.btn_checkout.setMinimumHeight(44)
+        self.btn_checkout.setMinimumHeight(56)
         self.btn_checkout.clicked.connect(self._checkout)
         self.btn_hold = QPushButton("Hold")
         self.btn_hold.clicked.connect(self._hold)
@@ -257,19 +279,39 @@ class POSScreen(BaseScreen):
         self._update_mode_visibility()
         self._refresh_cart()
 
+    def _toggle_details(self, checked: bool) -> None:
+        self.details_widget.setVisible(checked)
+        self.details_btn.setArrowType(Qt.ArrowType.DownArrow if checked
+                                      else Qt.ArrowType.RightArrow)
+
     def _load_categories(self) -> None:
-        keep = self.cat_list.currentRow()
-        self.cat_list.clear()
+        keep = self._active_cat_id
+        for btn, _cid in self._cat_buttons:
+            btn.deleteLater()
+        self._cat_buttons = []
         with self.db() as s:
             cats = [(c.id, c.name) for c in self.svc(s).catalog.list_categories()]
-        all_item = QListWidgetItem("All")
-        all_item.setData(Qt.ItemDataRole.UserRole, None)
-        self.cat_list.addItem(all_item)
+        self._add_cat_button("All", None)
         for cid, name in cats:
-            it = QListWidgetItem(name)
-            it.setData(Qt.ItemDataRole.UserRole, cid)
-            self.cat_list.addItem(it)
-        self.cat_list.setCurrentRow(max(0, min(keep, self.cat_list.count() - 1)))
+            self._add_cat_button(name, cid)
+        self._set_active_cat(keep if any(c == keep for _, c in
+                                         self._cat_buttons) else None)
+
+    def _add_cat_button(self, text: str, cat_id: int | None) -> None:
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(lambda _=False, cid=cat_id: self._set_active_cat(cid))
+        self.cat_bar.addWidget(btn)
+        self._cat_buttons.append((btn, cat_id))
+
+    def _set_active_cat(self, cat_id: int | None) -> None:
+        self._active_cat_id = cat_id
+        for btn, cid in self._cat_buttons:
+            active = (cid == cat_id)
+            btn.setChecked(active)
+            set_class(btn, "primary" if active else "")
+        self._reload_cards()
 
     def _load_customers(self) -> None:
         self.customer_combo.clear()
@@ -279,8 +321,7 @@ class POSScreen(BaseScreen):
                 self.customer_combo.addItem(c.name, c.id)
 
     def _current_category(self):
-        item = self.cat_list.currentItem()
-        return item.data(Qt.ItemDataRole.UserRole) if item else None
+        return self._active_cat_id
 
     def _reload_cards(self) -> None:
         cat_id = self._current_category()
@@ -294,9 +335,12 @@ class POSScreen(BaseScreen):
                 if cat_id is not None and p.category_id != cat_id:
                     continue
                 tax = svc.catalog.tax_rate_of(p)
+                level = (svc.inventory.stock_level(p.id)
+                         if p.track_stock else None)
                 self._products[p.id] = {
                     "id": p.id, "name": p.name, "name_ur": p.name_ur or "",
                     "price": d(p.sell_price), "tax": tax,
+                    "track": p.track_stock, "level": level,
                 }
                 rows.append(self._products[p.id])
 
@@ -311,9 +355,12 @@ class POSScreen(BaseScreen):
             label_lines = [info["name"]]
             if info["name_ur"]:
                 label_lines.append(info["name_ur"])
-            label_lines.append(fmt(info["price"]))
+            price_text = fmt(info["price"])
+            if info["track"] and info["level"] is not None and info["level"] <= 0:
+                price_text += " (Out)"
+            label_lines.append(price_text)
             btn = QPushButton("\n".join(label_lines))
-            btn.setMinimumSize(130, 64)
+            btn.setMinimumSize(140, 76)
             btn.clicked.connect(lambda _=False, pid=info["id"]: self._add_product(pid))
             self.cards_grid.addWidget(btn, i // cols, i % cols)
 
@@ -568,5 +615,8 @@ class POSScreen(BaseScreen):
         with self.db() as s:
             mode = get_setting(s, "business_mode", "restaurant")
         restaurant = (mode == "restaurant")
-        self.table_edit.setVisible(restaurant)
-        self.waiter_edit.setVisible(restaurant)
+        for widget in (self.table_edit, self.waiter_edit):
+            widget.setVisible(restaurant)
+            label = self.details_form.labelForField(widget)
+            if label is not None:
+                label.setVisible(restaurant)

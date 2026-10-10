@@ -5,7 +5,7 @@ import csv
 import io
 from decimal import Decimal
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -37,6 +37,21 @@ class CatalogService:
         return qy.all()
 
     # -- products -------------------------------------------------------------------
+    def generate_sku(self) -> str:
+        """Return a unique SKU like ``P-00042``.
+
+        Based on (max product id + 1); walks forward on collision and falls
+        back to a timestamp-derived number when the table is empty.
+        """
+        import time
+        max_id = self.s.query(func.max(models.Product.id)).scalar()
+        n = (max_id + 1) if max_id else int(time.time()) % 100000
+        while True:
+            sku = f"P-{n:05d}"
+            if not self.s.query(models.Product).filter_by(sku=sku).first():
+                return sku
+            n += 1
+
     def create_product(self, user, *, sku: str, name: str, sell_price: Decimal,
                        category_id: int | None = None, barcode: str | None = None,
                        cost_price: Decimal = Decimal("0"), name_ur: str = "",

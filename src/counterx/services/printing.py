@@ -53,6 +53,7 @@ class PrintService:
     def _footer(self) -> list[str]:
         out = [_line(), _center(self._setting("receipt_footer", "Thank you!"))]
         out.append(_center(f"{COMPANY_NAME}: {', '.join(COMPANY_PHONES)}"))
+        out.append(_center("Powered by CounterX"))
         return out
 
     def receipt(self, sale_id: int) -> str:

@@ -14,6 +14,18 @@ from .base import AppContext, get_setting
 from .screens import SCREENS
 from .theme import set_class
 
+# Sidebar navigation grouped by area. Titles must match each screen's
+# nav_title; anything not listed here falls back to nav_order sorting.
+NAV_GROUPS: list[tuple[str, list[str]]] = [
+    ("SALES", ["Dashboard", "New Sale", "Orders & History"]),
+    ("CATALOG", ["Products & Menu", "Categories & Modifiers",
+                 "Inventory & Stock", "Purchases", "Suppliers"]),
+    ("CASH", ["Cash Register", "Shift Management", "Day Closing", "Expenses"]),
+    ("MANAGE", ["Customers", "Employees & Permissions", "Reports & Analytics"]),
+    ("SYSTEM", ["Printer Settings", "Business Settings", "Database & Backup",
+                "Cloud Sync", "License & About"]),
+]
+
 
 class MainWindow(QMainWindow):
     def __init__(self, ctx: AppContext):
@@ -36,10 +48,10 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(12, 16, 12, 12)
         side_layout.setSpacing(4)
 
-        brand = QLabel("counterX")
-        brand.setObjectName("BrandLabel")
-        brand_sub = QLabel("POS • Pakistan Edition")
-        brand_sub.setObjectName("BrandSub")
+        brand = QLabel("◆ CounterX")
+        set_class(brand, "brand")
+        brand_sub = QLabel("POS SOFTWARE COMPANY")
+        set_class(brand_sub, "brand-sub")
         side_layout.addWidget(brand)
         side_layout.addWidget(brand_sub)
         side_layout.addSpacing(12)
@@ -61,18 +73,22 @@ class MainWindow(QMainWindow):
 
         visible = [c for c in sorted(SCREENS, key=lambda c: c.nav_order)
                    if ctx.can(c.nav_permission)]
-        for cls in visible:
-            screen = cls(ctx)
-            idx = self.stack.addWidget(screen)
-            self.screens[cls.nav_title] = screen
-            btn = QPushButton(cls.nav_title)
-            btn.setObjectName("NavButton")
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda _=False, i=idx: self.show_screen(i))
-            self.nav_group.addButton(btn)
-            nav_layout.addWidget(btn)
-            screen._nav_index = idx  # noqa: SLF001
+        by_title = {c.nav_title: c for c in visible}
+        for section, titles in NAV_GROUPS:
+            section_added = False
+            for title in titles:
+                cls = by_title.pop(title, None)
+                if cls is None:
+                    continue
+                if not section_added:
+                    header = QLabel(section)
+                    set_class(header, "nav-section")
+                    nav_layout.addWidget(header)
+                    section_added = True
+                self._add_nav_button(cls, nav_layout)
+        # Any screen not listed in NAV_GROUPS (fallback: nav_order).
+        for cls in sorted(by_title.values(), key=lambda c: c.nav_order):
+            self._add_nav_button(cls, nav_layout)
         nav_layout.addStretch(1)
         nav_area.setWidget(nav_host)
         side_layout.addWidget(nav_area, 1)
@@ -102,6 +118,20 @@ class MainWindow(QMainWindow):
             first_btn.setChecked(True)
             self.show_screen(0)
         self.refresh_chrome()
+
+    def _add_nav_button(self, cls, nav_layout) -> None:
+        """Instantiate one screen and add its sidebar button."""
+        screen = cls(self.ctx)
+        idx = self.stack.addWidget(screen)
+        self.screens[cls.nav_title] = screen
+        btn = QPushButton(cls.nav_title)
+        btn.setObjectName("NavButton")
+        btn.setCheckable(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(lambda _=False, i=idx: self.show_screen(i))
+        self.nav_group.addButton(btn)
+        nav_layout.addWidget(btn)
+        screen._nav_index = idx  # noqa: SLF001
 
     def show_screen(self, index: int) -> None:
         self.stack.setCurrentIndex(index)

@@ -1,6 +1,6 @@
 @echo off
 REM counterX POS - full Windows build. Run on Windows 10/11 64-bit with Python 3.10+.
-REM Produces: build\counterX POS\  (app folder) and dist\counterX-POS-Setup-1.0.0.exe
+REM Produces: build\counterX POS\  (app folder) and dist\counterX-POS-Setup-1.1.0.exe
 
 setlocal
 cd /d %~dp0\..
@@ -25,5 +25,5 @@ if errorlevel 1 (
 iscc installer\counterx.iss
 
 echo.
-echo DONE. Installer: dist\counterX-POS-Setup-1.0.0.exe
+echo DONE. Installer: dist\counterX-POS-Setup-1.1.0.exe
 endlocal
